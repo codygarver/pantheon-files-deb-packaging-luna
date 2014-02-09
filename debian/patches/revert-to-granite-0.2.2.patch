@@ -1,0 +1,130 @@
+--- a/INSTALL
++++ b/INSTALL
+@@ -1,6 +1,6 @@
+ Requirements:
+ - Vala >= 0.16
+-- Granite >= 0.3.0
++- Granite >= 0.2.2
+ - Gtk+ >= 3.0.3
+ - GLib >= 2.32
+ - Gio >= 2.0
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -13,7 +13,7 @@
+ find_package (PkgConfig)
+ 
+ pkg_check_modules (DEPS REQUIRED
+-    granite>=0.3.0
++    granite>=0.2.2
+     glib-2.0>=2.29.0
+     gthread-2.0
+     gio-2.0
+--- a/src/View/Window.vala
++++ b/src/View/Window.vala
+@@ -223,17 +223,18 @@
+                 return false;
+             });
+ 
+-            tabs.new_tab_requested.connect (() => {
+-                make_new_tab ();
++            tabs.tab_added.connect ((tab) => {
++                make_new_tab (tab);
+             });
+ 
+-            tabs.close_tab_requested.connect ((tab) => {
++            tabs.tab_removed.connect ((tab) => {
++                if (tabs.n_tabs == 1) {
++                    make_new_tab ();
++                }
++
+                 tab.restore_data =
+                     (tab.page as ViewContainer).slot.location.get_uri ();
+ 
+-                if (tabs.n_tabs == 1)
+-                    make_new_tab ();
+-
+                 return true;
+             });
+ 
+@@ -241,12 +242,12 @@
+                 change_tab (tabs.get_tab_position (new_tab));
+             });
+ 
+-            tabs.tab_restored.connect ((label, restore_data, icon) => {
+-                make_new_tab (File.new_for_uri (restore_data));
++            tabs.tab_restored.connect ((tab) => {
++                make_new_tab (tab, File.new_for_uri (tab.restore_data));
+             });
+ 
+             tabs.tab_duplicated.connect ((tab) => {
+-                make_new_tab (File.new_for_uri (((tab.page as ViewContainer).get_active_slot ()).location.get_uri ()));
++                make_new_tab (null, File.new_for_uri (((tab.page as ViewContainer).get_active_slot ()).location.get_uri ()));
+             });
+ 
+             Gtk.Allocation win_alloc;
+@@ -327,24 +328,31 @@
+             }
+         }
+ 
+-        private void make_new_tab (File location = File.new_for_commandline_arg (Environment.get_home_dir ())) {
++        private void make_new_tab (Granite.Widgets.Tab? tab = null,
++                                   File location = File.new_for_commandline_arg (Environment.get_home_dir ())) {
++            if (tab == null) {
++                var new_tab = new Granite.Widgets.Tab ();
++                tabs.insert_tab (new_tab, -1);
++                make_new_tab (new_tab, location);
++                return;
++            }
++
+             var content = new View.ViewContainer (this, location,
+                                     current_tab != null ? current_tab.view_mode : Preferences.settings.get_enum("default-viewmode"));
+ 
+-            var tab = new Granite.Widgets.Tab ("", null, content);
++            tab.label = "";
++            tab.page = content;
+ 
+             content.tab_name_changed.connect ((tab_name) => {
+                 tab.label = tab_name;
+             });
+ 
+-            tabs.insert_tab (tab, -1);
+-
+             tabs.current = tab;
+             change_tab (tabs.get_tab_position (tab));
+         }
+ 
+         public void add_tab (File location) {
+-            make_new_tab (location);
++            make_new_tab (null, location);
+ 
+             /* The following fixes a bug where upon first opening
+                Files, the overlay status bar is shown empty. */
+@@ -357,7 +365,8 @@
+ 
+         public void remove_tab (ViewContainer view_container) {
+             var tab = tabs.get_tab_by_widget (view_container as Gtk.Widget);
+-            tab.close ();
++            if (tab != null)
++                tabs.remove_tab (tab);
+         }
+ 
+         public void add_window(File location){
+--- a/data/pantheon-files.desktop.in
++++ b/data/pantheon-files.desktop.in
+@@ -12,7 +12,7 @@
+ Categories=System;Utility;Core;GTK;FileTools;FileManager;
+ X-GNOME-Gettext-Domain=pantheon-files
+ 
+-X-Ayatana-Desktop-Shortcuts=TabNew;WindowNew;Root;AboutDialog
++X-Ayatana-Desktop-Shortcuts=TabNew;WindowNew;Root
+ 
+ [TabNew Shortcut Group]
+ Name=New _Tab
+@@ -29,7 +29,3 @@
+ Exec=gksu pantheon-files
+ TargetEnvironment=Unity
+ 
+-[AboutDialog Shortcut Group]
+-Name=About _Files
+-Exec=pantheon-files --about
+-TargetEnvironment=Unity
