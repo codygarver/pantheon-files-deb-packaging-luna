@@ -1,3 +1,9 @@
+pantheon-files (0.1.6) precise; urgency=medium
+
+  * New upstream release.
+
+ -- Cody Garver <cody@elementaryos.org>  Sun, 09 Feb 2014 03:43:06 -0600
+
 pantheon-files (0.1.5.1) precise; urgency=low
 
   * Select new folders after creation (LP: 1178869)
